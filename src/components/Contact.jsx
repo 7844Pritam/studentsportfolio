@@ -1,7 +1,7 @@
-import React, { useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { db} from '../../firebase';  // Import Firebase functions4
-import { collection, addDoc, serverTimestamp} from "firebase/firestore";
+  import React, { useRef, useState } from "react";
+  import { motion } from "framer-motion";
+  import { db} from '../../firebase';  // Import Firebase functions4
+  import { collection, addDoc, serverTimestamp} from "firebase/firestore";
 
 import map from '../assets/map.svg';
 

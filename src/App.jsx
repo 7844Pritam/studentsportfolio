@@ -3,14 +3,14 @@ import LandingPages from "./pages/LandingPages";
 import UserLayout from "./pages/UserLayout";
 import AdminLayout from "./admin/AdminLayout";
 import AdminPanel from "./admin/AdminPanel";
-import Experience from "./components/Experience";
 import ProjectsDisplay from "./admin/ProjectsDisplay";
 import ExperiencesDisplay from "./admin/ExperiencesDisplay";
 import Testimonials from "./admin/Testimonials";
 import AddAbout from "./admin/Addabout";
 import TechAdmin from "./admin/TechAdmin";
 import AdminContacts from "./admin/ContactAdmin";
-
+import SignUpScreen from "./pages/SignUpPage";
+import LoginScreen from "./pages/LoginPage";
 
 const App = () => {
   return (
@@ -19,6 +19,9 @@ const App = () => {
         <Routes>
           <Route element={<UserLayout/>}>
             <Route path="/" element={<LandingPages />} />
+            <Route path="/register" element={<SignUpScreen />} />
+            <Route path="/login" element={<LoginScreen />} />
+
           </Route>
           <Route element={<AdminLayout/>}>
             <Route path="/admin" element={<AdminPanel />} />

@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { getFirestore } from "firebase/firestore";  // Correct import for Firestore
+import { getStorage } from "firebase/storage";  // Correct import for Firebase Storage
+import { getAuth } from "firebase/auth";  // Correct import for Firebase Authentication
+
 const firebaseConfig = {
   apiKey: "AIzaSyCWSBMpZ2SoImKQeoH-j7u63dvVA1GKVuw",
   authDomain: "perdaycoaching.firebaseapp.com",
@@ -18,4 +20,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-export { db, storage };
+// Authentication
+const auth = getAuth(app);  // Correct initialization of Firebase Authentication
+
+export { db, storage, auth };

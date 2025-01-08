@@ -15,10 +15,7 @@ import {
   git,
   figma,
   docker,
-  meta,
-  starbucks,
-  tesla,
-  shopify,
+
   carrent,
   jobit,
   tripguide,
@@ -43,6 +40,10 @@ export const navLinks = [
     id: "My Courses",
     title: "My Courses",
   },
+  {
+    id:"/login",
+    title:"Login"
+  }
 ];
 
 const services = [

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db, storage } from '../../firebase';  // Ensure correct import path
-import { doc, getDoc, setDoc, collection, addDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { db, storage, } from '../../firebase';  
+import { getAuth } from "firebase/auth";  
+import { doc, getDoc, setDoc, collection, addDoc, getDocs, deleteDoc,query,where } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 
 const AdminPanel = () => {
@@ -14,23 +15,34 @@ const AdminPanel = () => {
   const [newTitle, setNewTitle] = useState(''); // Title input for the modal
   const [newIcon, setNewIcon] = useState(null); // File input for the modal
 
+
   // Fetch About Text and Existing Services
   useEffect(() => {
     const fetchAboutTextAndServices = async () => {
       try {
-        // Fetch About Text
+        const auth = getAuth();
+        const user = auth.currentUser;
+    
+        if (!user) {
+          console.log("No user is currently logged in.");
+          return;
+        }
+    
+        // Fetch About Text (same as before)
         const aboutDocRef = doc(db, 'about', 'aboutText');
         const aboutDocSnap = await getDoc(aboutDocRef);
         if (aboutDocSnap.exists()) {
           setAboutText(aboutDocSnap.data().text);
         }
-
-        // Fetch Services
-        const servicesQuery = await getDocs(collection(db, 'services'));
-        const servicesList = servicesQuery.docs.map(doc => ({
+    
+        // Fetch Services (filter by current user ID)
+        const servicesQuery = query(collection(db, 'services'), where("userId", "==", user.uid));
+        const servicesQuerySnapshot = await getDocs(servicesQuery);
+        const servicesList = servicesQuerySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
+    
         setExistingServices(servicesList);
       } catch (error) {
         console.error('Error fetching About Text or Services:', error);
@@ -39,6 +51,8 @@ const AdminPanel = () => {
 
     fetchAboutTextAndServices();
   }, []);
+
+
 
   const handleAboutTextChange = (e) => {
     setAboutText(e.target.value);
@@ -57,61 +71,76 @@ const AdminPanel = () => {
     setServices(updatedServices);
   };
 
+
+
   const handleAddService = () => {
     setServices([...services, { title: '', icon: null }]);
   };
 
-  const handleSave = async () => {
-    if (aboutText.trim() !== '') {
-      try {
-        const aboutDocRef = doc(db, 'about', 'aboutText');
-        await setDoc(aboutDocRef, { text: aboutText }, { merge: true });
-      } catch (error) {
-        console.error('Error saving About Text:', error);
-        setMessage('Error saving About Text.');
-        return;
-      }
+
+
+
+const handleSave = async () => {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  if (!user) {
+    setMessage("User is not authenticated.");
+    return;
+  }
+
+  if (aboutText.trim() !== '') {
+    try {
+      const aboutDocRef = doc(db, 'about', 'aboutText');
+      await setDoc(aboutDocRef, { text: aboutText }, { merge: true });
+    } catch (error) {
+      console.error('Error saving About Text:', error);
+      setMessage('Error saving About Text.');
+      return;
+    }
+  }
+
+  for (const service of services) {
+    if (service.title.trim() === '' || !service.icon) {
+      setMessage('Please fill in all fields for each service.');
+      return;
     }
 
-    for (const service of services) {
-      if (service.title.trim() === '' || !service.icon) {
-        setMessage('Please fill in all fields for each service.');
-        return;
-      }
+    try {
+      const storageRef = ref(storage, `service_icons/${service.icon.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, service.icon);
 
-      try {
-        const storageRef = ref(storage, `service_icons/${service.icon.name}`);
-        const uploadTask = uploadBytesResumable(storageRef, service.icon);
+      uploadTask.on(
+        'state_changed',
+        null,
+        (error) => {
+          console.error('Error uploading image:', error);
+          setMessage('Error uploading icon.');
+        },
+        async () => {
+          const iconURL = await getDownloadURL(uploadTask.snapshot.ref);
+          await addDoc(collection(db, 'services'), {
+            title: service.title,
+            icon: iconURL,
+            userId: user.uid,  // Add the user ID to associate the service with the user
+          });
 
-        uploadTask.on(
-          'state_changed',
-          null,
-          (error) => {
-            console.error('Error uploading image:', error);
-            setMessage('Error uploading icon.');
-          },
-          async () => {
-            const iconURL = await getDownloadURL(uploadTask.snapshot.ref);
-            await addDoc(collection(db, 'services'), {
-              title: service.title,
-              icon: iconURL,
-            });
+          const servicesQuery = await getDocs(collection(db, 'services'));
+          const servicesList = servicesQuery.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
 
-            const servicesQuery = await getDocs(collection(db, 'services'));
-            const servicesList = servicesQuery.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-
-            setMessage('Service saved successfully!');
-          }
-        );
-      } catch (error) {
-        console.error('Error saving service:', error);
-        setMessage('Error saving service.');
-      }
+          setMessage('Service saved successfully!');
+        }
+      );
+    } catch (error) {
+      console.error('Error saving service:', error);
+      setMessage('Error saving service.');
     }
-  };
+  }
+};
+
 
   const handleEditService = (service) => {
     setEditingService(service);
@@ -121,60 +150,109 @@ const AdminPanel = () => {
   };
 
   const handleUpdateService = async () => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+  
+    if (!user) {
+      setMessage("User is not authenticated.");
+      return;
+    }
+  
     try {
-      let iconURL = editingService.icon;
+      // Step 1: Check if the service belongs to the current user
+      const serviceDocRef = doc(db, 'services', editingService.id);
+      const serviceDocSnap = await getDoc(serviceDocRef);
+  
+      if (!serviceDocSnap.exists()) {
+        setMessage("Service not found.");
+        return;
+      }
+  
+      const serviceData = serviceDocSnap.data();
+  
+      // Ensure the service is owned by the current user
+      if (serviceData.userId !== user.uid) {
+        setMessage("You don't have permission to update this service.");
+        return;
+      }
+  
+      // Step 2: Handle the icon update (if a new icon is selected)
+      let iconURL = serviceData.icon; // If no new icon is uploaded, keep the current one
       if (newIcon) {
         const storageRef = ref(storage, `service_icons/${newIcon.name}`);
         const uploadTask = uploadBytesResumable(storageRef, newIcon);
-        
-        // Upload new icon
+  
+        // Upload new icon and get its URL
         await uploadTask;
-        iconURL = await getDownloadURL(uploadTask.snapshot.ref);
-        
-        // Delete old icon from Firebase Storage
-        const oldIconRef = ref(storage, editingService.icon);
+        iconURL = await getDownloadURL(uploadTask.snapshot.ref());
+  
+        // Delete old icon from Firebase Storage (if necessary)
+        const oldIconRef = ref(storage, serviceData.icon);
         await deleteObject(oldIconRef);
       }
-
-      // Update service in Firestore
-      const serviceDocRef = doc(db, 'services', editingService.id);
+  
+      // Step 3: Update service details in Firestore
       await setDoc(serviceDocRef, { title: newTitle, icon: iconURL }, { merge: true });
-
-      // Close the modal and reset state
-      setShowModal(false);
-      setEditingService(null);
-      setNewTitle('');
-      setNewIcon(null);
-
-      // Update local state
+  
+      // Step 4: Update local state with the new data
       const updatedServices = existingServices.map((service) =>
         service.id === editingService.id ? { ...service, title: newTitle, icon: iconURL } : service
       );
       setExistingServices(updatedServices);
+  
+      // Step 5: Close modal and reset state
+      setShowModal(false);
+      setEditingService(null);
+      setNewTitle('');
+      setNewIcon(null);
+  
       setMessage('Service updated successfully!');
     } catch (error) {
       console.error('Error updating service:', error);
       setMessage('Error updating service.');
     }
   };
+  
 
   const handleDeleteService = async (serviceId, iconURL) => {
+    const auth = getAuth();
+    const user = auth.currentUser;
+  
+    if (!user) {
+      setMessage("User is not authenticated.");
+      return;
+    }
+  
     try {
-      const iconRef = ref(storage, iconURL);
-      await deleteObject(iconRef);
-
+      // Get the service from Firestore to ensure it belongs to the current user
       const serviceDocRef = doc(db, 'services', serviceId);
-      await deleteDoc(serviceDocRef);
-
-      const updatedServices = existingServices.filter((service) => service.id !== serviceId);
-      setExistingServices(updatedServices);
-
-      setMessage('Service deleted successfully!');
+      const serviceDocSnap = await getDoc(serviceDocRef);
+  
+      if (serviceDocSnap.exists()) {
+        const serviceData = serviceDocSnap.data();
+        if (serviceData.userId === user.uid) {
+          // Only delete if the current user is the owner of the service
+          const iconRef = ref(storage, iconURL);
+          await deleteObject(iconRef);
+  
+          await deleteDoc(serviceDocRef);
+  
+          const updatedServices = existingServices.filter((service) => service.id !== serviceId);
+          setExistingServices(updatedServices);
+  
+          setMessage('Service deleted successfully!');
+        } else {
+          setMessage("You don't have permission to delete this service.");
+        }
+      } else {
+        setMessage("Service not found.");
+      }
     } catch (error) {
       console.error('Error deleting service:', error);
       setMessage('Error deleting service.');
     }
   };
+  
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 py-10 px-5">
