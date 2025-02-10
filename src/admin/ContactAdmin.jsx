@@ -1,14 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { db } from "../../firebase"; // Import Firebase functions
+import { db,auth } from "../../firebase"; // Import Firebase functions
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 
 const AdminContacts = () => {
   const [contacts, setContacts] = useState([]);
 
+  const currentUser = auth.currentUser; // Get the current authenticated user
+
+  // Fetch contacts specific to the current user
   useEffect(() => {
-    // Fetch contacts from Firestore
     const fetchContacts = async () => {
-      const querySnapshot = await getDocs(collection(db, "contacts"));
+      if (!currentUser) {
+        console.log("User is not logged in.");
+        return;
+      }
+
+      const querySnapshot = await getDocs(collection(db, "users", currentUser.uid, "contacts"));
       const contactsList = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -17,11 +24,16 @@ const AdminContacts = () => {
     };
 
     fetchContacts();
-  }, []);
+  }, [currentUser]); // Refetch when the user changes or logs in
 
   // Delete contact by ID
   const handleDelete = async (id) => {
-    await deleteDoc(doc(db, "contacts", id));
+    if (!currentUser) {
+      alert("You must be logged in to delete contacts.");
+      return;
+    }
+
+    await deleteDoc(doc(db, "users", currentUser.uid, "contacts", id));
     setContacts(contacts.filter((contact) => contact.id !== id));
   };
 

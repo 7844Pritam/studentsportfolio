@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { SectionWrapper } from "../hoc";
-import { db, storage } from "../../firebase"; // Import Firebase instance
+import { db, storage,auth } from "../../firebase"; // Import Firebase instance
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore"; // Firebase functions
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"; // Firebase Storage functions
 
@@ -12,24 +12,32 @@ const Tech = () => {
   const [techIcon, setTechIcon] = useState(null); // This will store the file object
 
   // Fetch Technologies from Firestore
+  const currentUser = auth.currentUser; // Get current authenticated user
+
+  // Fetch technologies specific to the current user
   const fetchTechnologies = async () => {
+    if (!currentUser) {
+      console.log('User is not logged in.');
+      return;
+    }
+
     try {
-      const querySnapshot = await getDocs(collection(db, "technologies"));
-      const fetchedTechnologies = querySnapshot.docs.map(doc => ({
+      const querySnapshot = await getDocs(collection(db, 'users', currentUser.uid, 'technologies'));
+      const fetchedTechnologies = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
       setTechnologies(fetchedTechnologies);
     } catch (error) {
-      console.error("Error fetching technologies: ", error);
+      console.error('Error fetching technologies: ', error);
     }
   };
 
   useEffect(() => {
     fetchTechnologies();
-  }, []);
+  }, [currentUser]); // Refetch when the user changes or logs in
 
-  // Handle File Selection
+  // Handle File Selection for the technology icon
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -37,28 +45,27 @@ const Tech = () => {
     }
   };
 
-  // Handle Add/Edit Technology
+  // Handle Add/Edit Technology (submit form)
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // If a new image is selected, upload it to Firebase Storage
-    let imageUrl = "";
+
+    let imageUrl = '';
     if (techIcon) {
       const storageRef = ref(storage, `technologies/${techIcon.name}`);
       const uploadTask = uploadBytesResumable(storageRef, techIcon);
-      
+
       uploadTask.on(
-        "state_changed",
+        'state_changed',
         (snapshot) => {
           // You can monitor the upload progress here
         },
         (error) => {
-          console.error("Error uploading image: ", error);
+          console.error('Error uploading image: ', error);
         },
         async () => {
           // Once the upload is complete, get the image URL
           imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          
+
           // Proceed with adding or updating the technology
           await saveTechnology(imageUrl);
         }
@@ -73,22 +80,23 @@ const Tech = () => {
   const saveTechnology = async (imageUrl) => {
     if (selectedTech) {
       // Edit Technology
-      const techRef = doc(db, "technologies", selectedTech.id);
+      const techRef = doc(db, 'users', currentUser.uid, 'technologies', selectedTech.id);
       await updateDoc(techRef, {
         name: techName,
         icon: imageUrl || selectedTech.icon, // Keep old icon if no new image
       });
     } else {
       // Add New Technology
-      await addDoc(collection(db, "technologies"), {
+      await addDoc(collection(db, 'users', currentUser.uid, 'technologies'), {
         name: techName,
         icon: imageUrl,
       });
     }
+
     // Close popup and refresh data
     setShowPopup(false);
     fetchTechnologies();
-    setTechName("");
+    setTechName('');
     setTechIcon(null);
   };
 
@@ -103,11 +111,11 @@ const Tech = () => {
   // Handle Delete Technology
   const handleDelete = async (id) => {
     try {
-      const techRef = doc(db, "technologies", id);
+      const techRef = doc(db, 'users', currentUser.uid, 'technologies', id);
       await deleteDoc(techRef);
       fetchTechnologies();
     } catch (error) {
-      console.error("Error deleting technology: ", error);
+      console.error('Error deleting technology: ', error);
     }
   };
 

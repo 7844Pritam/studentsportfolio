@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { db, storage } from "../../firebase";  // Your Firebase config file
-import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { useState, useEffect } from "react";
+import { db, storage,auth } from "../../firebase";  // Your Firebase config file
+import { doc, getDoc, setDoc, deleteDoc} from "firebase/firestore";
+
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";  // Firebase Storage imports
 import { useNavigate } from "react-router-dom";  // For navigation (optional)
 
@@ -15,60 +16,57 @@ const AdminHeroSection = () => {
   const [progress, setProgress] = useState(0);  // State for upload progress
 
   const navigate = useNavigate();
+  const currentUser = auth.currentUser;
+  console.log("currentUser",currentUser);
 
-  // Fetch current Hero Section and CV data from Firestore
   useEffect(() => {
     const fetchHeroData = async () => {
-      const docRef = doc(db, "heroSection", "1");  // Document with ID "1"
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setHeading(data.heading);
-        setSubheading(data.subheading);
-        setImageFile(null);  // Reset image to null if not needed
-        setImagePreview(data.imageUrl);  // Set the existing image preview if any
-      } else {
-        console.log("No such document!");
-      }
+      if (currentUser) {
+        const docRef = doc(db, "users", currentUser.uid, "heroSection", "1");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setHeading(data.heading);
+          setSubheading(data.subheading);
+          setImagePreview(data.imageUrl);
+        } else {
+          console.log("No such document in heroSection!");
+        }
 
-      // Fetch CV data
-      const cvDocRef = doc(db, "cvSection", "1");  // Document with ID "1" for CV
-      const cvDocSnap = await getDoc(cvDocRef);
-      if (cvDocSnap.exists()) {
-        const cvData = cvDocSnap.data();
-        setCvUrl(cvData.cvUrl);  // Set the CV URL from Firestore
-      } else {
-        console.log("No CV document found!");
+        // Fetch CV data for the current user
+        const cvDocRef = doc(db, "users", currentUser.uid, "cvSection", "1");
+        const cvDocSnap = await getDoc(cvDocRef);
+        if (cvDocSnap.exists()) {
+          const cvData = cvDocSnap.data();
+          setCvUrl(cvData.cvUrl);
+        } else {
+          console.log("No CV document found for user!");
+        }
       }
     };
 
     fetchHeroData();
-  }, []);
+  }, [currentUser]);
 
-  // Handle image file selection
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImageFile(file);  // Set the selected image file in state
-
-      // Create a preview of the image
+      setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImagePreview(reader.result);  // Set the image preview URL
+        setImagePreview(reader.result);
       };
-      reader.readAsDataURL(file);  // Read the file as a data URL
+      reader.readAsDataURL(file);
     }
   };
 
-  // Handle CV file selection
   const handleCvChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setCvFile(file);  // Set the selected CV file in state
+      setCvFile(file);
     }
   };
 
-  // Handle form submission to update Hero Section and CV
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -76,11 +74,8 @@ const AdminHeroSection = () => {
     try {
       let imageUrl = "";
       if (imageFile) {
-        // Step 1: Upload image to Firebase Storage
-        const storageRef = ref(storage, `hero-images/${imageFile.name}`);
+        const storageRef = ref(storage, `hero-images/${currentUser.uid}/${imageFile.name}`);
         const uploadTask = uploadBytesResumable(storageRef, imageFile);
-
-        // Step 2: Track upload progress
         uploadTask.on(
           "state_changed",
           (snapshot) => {
@@ -93,22 +88,19 @@ const AdminHeroSection = () => {
             alert("Error uploading image. Please try again.");
           },
           async () => {
-            // Step 3: Get the download URL after the upload is complete
             imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            // Step 4: Update Firestore with the new data
-            const docRef = doc(db, "heroSection", "1");
+            const docRef = doc(db, "users", currentUser.uid, "heroSection", "1");
             await setDoc(docRef, {
               heading: heading,
               subheading: subheading,
-              imageUrl: imageUrl,  // Save the image URL in Firestore
+              imageUrl: imageUrl,
             });
 
             alert("Hero Section updated successfully!");
           }
         );
       } else {
-        // If no image selected, just update Firestore with text data
-        const docRef = doc(db, "heroSection", "1");
+        const docRef = doc(db, "users", currentUser.uid, "heroSection", "1");
         await setDoc(docRef, {
           heading: heading,
           subheading: subheading,
@@ -116,9 +108,8 @@ const AdminHeroSection = () => {
         alert("Hero Section updated successfully!");
       }
 
-      // Handle CV upload if a file is selected
       if (cvFile) {
-        const cvRef = ref(storage, `cv-files/${cvFile.name}`);
+        const cvRef = ref(storage, `cv-files/${currentUser.uid}/${cvFile.name}`);
         const cvUploadTask = uploadBytesResumable(cvRef, cvFile);
 
         cvUploadTask.on(
@@ -135,10 +126,9 @@ const AdminHeroSection = () => {
           async () => {
             const cvDownloadUrl = await getDownloadURL(cvUploadTask.snapshot.ref);
 
-            // Step 5: Save the CV URL in Firestore
-            const cvDocRef = doc(db, "cvSection", "1");
+            const cvDocRef = doc(db, "users", currentUser.uid, "cvSection", "1");
             await setDoc(cvDocRef, { cvUrl: cvDownloadUrl });
-            setCvUrl(cvDownloadUrl);  // Update CV URL in state
+            setCvUrl(cvDownloadUrl);
 
             alert("CV uploaded successfully!");
           }
@@ -148,7 +138,6 @@ const AdminHeroSection = () => {
       }
 
       setLoading(false);
-      navigate("/admin");  // Optional: navigate to another page
     } catch (error) {
       console.error("Error updating Hero Section or CV: ", error);
       alert("Failed to update. Please try again.");
@@ -156,20 +145,17 @@ const AdminHeroSection = () => {
     }
   };
 
-  // Handle CV file deletion
   const handleDeleteCv = async () => {
     if (window.confirm("Are you sure you want to delete the CV?")) {
       try {
-        // Delete CV from Firebase Storage
         const cvRef = ref(storage, cvUrl);
         await deleteObject(cvRef);
 
-        // Remove CV URL from Firestore
-        const cvDocRef = doc(db, "cvSection", "1");
+        const cvDocRef = doc(db, "users", currentUser.uid, "cvSection", "1");
         await deleteDoc(cvDocRef);
 
         alert("CV deleted successfully!");
-        setCvUrl("");  // Clear CV URL from state
+        setCvUrl("");
       } catch (error) {
         console.error("Error deleting CV: ", error);
         alert("Failed to delete CV. Please try again.");

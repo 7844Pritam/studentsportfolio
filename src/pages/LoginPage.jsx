@@ -38,7 +38,7 @@ export default function LoginScreen() {
           values.password
         );
         const user = userCredential.user;
-
+        console.log(user.uid)
         if (user.emailVerified) {
           navigate("/");
         } else {

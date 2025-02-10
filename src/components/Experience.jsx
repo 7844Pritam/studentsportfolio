@@ -4,7 +4,7 @@ import {
   VerticalTimelineElement,
 } from "react-vertical-timeline-component";
 import { motion } from "framer-motion";
-import { db } from "../../firebase"; // Import firebase configuration
+import { db ,auth} from "../../firebase"; // Import firebase configuration
 import { collection, getDocs } from "firebase/firestore"; // Firestore methods
 
 import "react-vertical-timeline-component/style.min.css";
@@ -60,24 +60,41 @@ const Experience = () => {
   const [experiences, setExperiences] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const currentUser = auth.currentUser; // Get the current authenticated user
+
   useEffect(() => {
     const fetchExperiences = async () => {
+      if (!currentUser) {
+        console.log('User is not logged in.');
+        setLoading(false); // Stop loading if the user is not logged in
+        return;
+      }
+
       try {
-        const querySnapshot = await getDocs(collection(db, "experiences"));
+        // Reference to the user's experiences collection
+        const experiencesRef = collection(db, 'users', currentUser.uid, 'experiences');
+        const querySnapshot = await getDocs(experiencesRef);
+
         const experiencesData = querySnapshot.docs.map((doc) => ({
-          ...doc.data(),
           id: doc.id,
+          ...doc.data(),
         }));
-        setExperiences(experiencesData);
+
+        setExperiences(experiencesData); // Set the fetched experiences data
       } catch (error) {
-        console.error("Error fetching experiences: ", error);
+        console.error('Error fetching experiences:', error);
       } finally {
-        setLoading(false);
+        setLoading(false); // Set loading to false after the fetch operation is done
       }
     };
 
     fetchExperiences();
-  }, []);
+  }, [currentUser]); // Re-fetch when the currentUser changes
+
+  if (loading) {
+    return <div>Loading...</div>; // Display loading text or spinner while fetching
+  }
+
 
   return (
     <>

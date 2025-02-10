@@ -11,6 +11,7 @@ import TechAdmin from "./admin/TechAdmin";
 import AdminContacts from "./admin/ContactAdmin";
 import SignUpScreen from "./pages/SignUpPage";
 import LoginScreen from "./pages/LoginPage";
+import Certificates from "./pages/CertificateGen";
 
 const App = () => {
   return (
@@ -21,6 +22,7 @@ const App = () => {
             <Route path="/" element={<LandingPages />} />
             <Route path="/register" element={<SignUpScreen />} />
             <Route path="/login" element={<LoginScreen />} />
+            <Route path="/hello" element={<Certificates />} />
 
           </Route>
           <Route element={<AdminLayout/>}>

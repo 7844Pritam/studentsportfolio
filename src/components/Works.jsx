@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { db } from "../../firebase";
+import { useState, useEffect } from "react";
+import { db,auth } from "../../firebase";
 import { collection, getDocs } from "firebase/firestore";
 import { styles } from "../styles";
 import { github } from "../assets";
@@ -111,17 +111,35 @@ const Works = () => {
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [activeTab, setActiveTab] = useState("all"); // default to 'all'
 
+  const currentUser = auth.currentUser; // Get the current authenticated user
+
   useEffect(() => {
     const fetchProjects = async () => {
-      const projectsCollection = collection(db, "projects");
-      const snapshot = await getDocs(projectsCollection);
-      const projectList = snapshot.docs.map((doc) => doc.data());
-      setProjects(projectList);
-      setFilteredProjects(projectList); // Set filtered projects initially to all projects
+      if (!currentUser) {
+        console.log("User is not logged in.");
+        return;
+      }
+
+      try {
+        // Reference to the user's projects collection
+        const projectsCollection = collection(db, 'users', currentUser.uid, 'projects');
+        const snapshot = await getDocs(projectsCollection);
+
+        const projectList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        setProjects(projectList);
+        setFilteredProjects(projectList); // Set filtered projects initially to all projects
+      } catch (error) {
+        console.error("Error fetching projects: ", error);
+      }
     };
 
     fetchProjects();
-  }, []);
+  }, [currentUser]); // Re-fetch when the currentUser changes
+
 
   // Filter projects based on the active tab
   const filterProjects = (tab) => {

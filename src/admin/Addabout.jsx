@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, storage, } from '../../firebase';  
-import { getAuth } from "firebase/auth";  
+import { db, storage,auth } from '../../firebase';  
 import { doc, getDoc, setDoc, collection, addDoc, getDocs, deleteDoc,query,where } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -20,38 +19,40 @@ const AdminPanel = () => {
   useEffect(() => {
     const fetchAboutTextAndServices = async () => {
       try {
-        const auth = getAuth();
-        const user = auth.currentUser;
+        const currentUser = auth.currentUser;
     
-        if (!user) {
+        if (!currentUser) {
           console.log("No user is currently logged in.");
           return;
         }
-    
+  
         // Fetch About Text (same as before)
-        const aboutDocRef = doc(db, 'about', 'aboutText');
+        const aboutDocRef = doc(db, 'users', currentUser.uid, 'about', 'aboutText');
         const aboutDocSnap = await getDoc(aboutDocRef);
         if (aboutDocSnap.exists()) {
           setAboutText(aboutDocSnap.data().text);
         }
-    
-        // Fetch Services (filter by current user ID)
-        const servicesQuery = query(collection(db, 'services'), where("userId", "==", user.uid));
+  
+        // Fetch Services specific to current user
+        const servicesQuery = query(
+          collection(db, 'services'), 
+          where("userId", "==", currentUser.uid) // Filter by userId
+        );
         const servicesQuerySnapshot = await getDocs(servicesQuery);
         const servicesList = servicesQuerySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
-    
+  
         setExistingServices(servicesList);
       } catch (error) {
         console.error('Error fetching About Text or Services:', error);
       }
     };
-
+  
     fetchAboutTextAndServices();
   }, []);
-
+  
 
 
   const handleAboutTextChange = (e) => {
@@ -80,66 +81,66 @@ const AdminPanel = () => {
 
 
 
-const handleSave = async () => {
-  const auth = getAuth();
-  const user = auth.currentUser;
-
-  if (!user) {
-    setMessage("User is not authenticated.");
-    return;
-  }
-
-  if (aboutText.trim() !== '') {
-    try {
-      const aboutDocRef = doc(db, 'about', 'aboutText');
-      await setDoc(aboutDocRef, { text: aboutText }, { merge: true });
-    } catch (error) {
-      console.error('Error saving About Text:', error);
-      setMessage('Error saving About Text.');
+  const handleSave = async () => {
+    const user = auth.currentUser;
+  
+    if (!user) {
+      setMessage("User is not authenticated.");
       return;
     }
-  }
-
-  for (const service of services) {
-    if (service.title.trim() === '' || !service.icon) {
-      setMessage('Please fill in all fields for each service.');
-      return;
+  
+    if (aboutText.trim() !== '') {
+      try {
+        const aboutDocRef = doc(db, 'users', user.uid, 'about', 'aboutText');
+        await setDoc(aboutDocRef, { text: aboutText }, { merge: true });
+      } catch (error) {
+        console.error('Error saving About Text:', error);
+        setMessage('Error saving About Text.');
+        return;
+      }
     }
-
-    try {
-      const storageRef = ref(storage, `service_icons/${service.icon.name}`);
-      const uploadTask = uploadBytesResumable(storageRef, service.icon);
-
-      uploadTask.on(
-        'state_changed',
-        null,
-        (error) => {
-          console.error('Error uploading image:', error);
-          setMessage('Error uploading icon.');
-        },
-        async () => {
-          const iconURL = await getDownloadURL(uploadTask.snapshot.ref);
-          await addDoc(collection(db, 'services'), {
-            title: service.title,
-            icon: iconURL,
-            userId: user.uid,  // Add the user ID to associate the service with the user
-          });
-
-          const servicesQuery = await getDocs(collection(db, 'services'));
-          const servicesList = servicesQuery.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-
-          setMessage('Service saved successfully!');
-        }
-      );
-    } catch (error) {
-      console.error('Error saving service:', error);
-      setMessage('Error saving service.');
+  
+    for (const service of services) {
+      if (service.title.trim() === '' || !service.icon) {
+        setMessage('Please fill in all fields for each service.');
+        return;
+      }
+  
+      try {
+        const storageRef = ref(storage, `service_icons/${service.icon.name}`);
+        const uploadTask = uploadBytesResumable(storageRef, service.icon);
+  
+        uploadTask.on(
+          'state_changed',
+          null,
+          (error) => {
+            console.error('Error uploading image:', error);
+            setMessage('Error uploading icon.');
+          },
+          async () => {
+            const iconURL = await getDownloadURL(uploadTask.snapshot.ref);
+            await addDoc(collection(db, 'services'), {
+              title: service.title,
+              icon: iconURL,
+              userId: user.uid,  // Associate the service with the current user
+            });
+  
+            const servicesQuery = await getDocs(collection(db, 'services'));
+            const servicesList = servicesQuery.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+  
+            setMessage('Service saved successfully!');
+          }
+        );
+      } catch (error) {
+        console.error('Error saving service:', error);
+        setMessage('Error saving service.');
+      }
     }
-  }
-};
+  };
+  
 
 
   const handleEditService = (service) => {
@@ -150,7 +151,6 @@ const handleSave = async () => {
   };
 
   const handleUpdateService = async () => {
-    const auth = getAuth();
     const user = auth.currentUser;
   
     if (!user) {
@@ -159,7 +159,6 @@ const handleSave = async () => {
     }
   
     try {
-      // Step 1: Check if the service belongs to the current user
       const serviceDocRef = doc(db, 'services', editingService.id);
       const serviceDocSnap = await getDoc(serviceDocRef);
   
@@ -176,35 +175,26 @@ const handleSave = async () => {
         return;
       }
   
-      // Step 2: Handle the icon update (if a new icon is selected)
       let iconURL = serviceData.icon; // If no new icon is uploaded, keep the current one
       if (newIcon) {
         const storageRef = ref(storage, `service_icons/${newIcon.name}`);
         const uploadTask = uploadBytesResumable(storageRef, newIcon);
   
-        // Upload new icon and get its URL
         await uploadTask;
         iconURL = await getDownloadURL(uploadTask.snapshot.ref());
   
-        // Delete old icon from Firebase Storage (if necessary)
+        // Delete old icon from Firebase Storage
         const oldIconRef = ref(storage, serviceData.icon);
         await deleteObject(oldIconRef);
       }
   
-      // Step 3: Update service details in Firestore
+      // Update service in Firestore
       await setDoc(serviceDocRef, { title: newTitle, icon: iconURL }, { merge: true });
   
-      // Step 4: Update local state with the new data
       const updatedServices = existingServices.map((service) =>
         service.id === editingService.id ? { ...service, title: newTitle, icon: iconURL } : service
       );
       setExistingServices(updatedServices);
-  
-      // Step 5: Close modal and reset state
-      setShowModal(false);
-      setEditingService(null);
-      setNewTitle('');
-      setNewIcon(null);
   
       setMessage('Service updated successfully!');
     } catch (error) {
@@ -213,9 +203,9 @@ const handleSave = async () => {
     }
   };
   
+  
 
   const handleDeleteService = async (serviceId, iconURL) => {
-    const auth = getAuth();
     const user = auth.currentUser;
   
     if (!user) {
@@ -252,6 +242,7 @@ const handleSave = async () => {
       setMessage('Error deleting service.');
     }
   };
+  
   
 
   return (

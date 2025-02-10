@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { styles } from "../styles";
 import { SectionWrapper } from "../hoc";
-import { db } from "../../firebase";  // Ensure Firebase is correctly imported
-import { doc, getDoc, getDocs, collection } from "firebase/firestore"; // Correct Firestore functions
+import { db,auth } from "../../firebase"; 
+import { doc, getDoc, getDocs, collection,query,where } from "firebase/firestore"; // Correct Firestore functions
 import { motion } from "framer-motion"; // Import motion for animations
 
 const ServiceCard = ({ index, title, icon }) => (
@@ -31,12 +31,20 @@ const About = () => {
   const [aboutText, setAboutText] = useState(''); // State to store About Text
   const [services, setServices] = useState([]);   // State to store services
 
-  // Fetch About Text
+  const currentUser = auth.currentUser; // Get the current authenticated user
+
+  // Fetch About Text - User Specific
   useEffect(() => {
     const fetchAboutText = async () => {
+      if (!currentUser) {
+        console.log('User is not logged in.');
+        return;
+      }
+
       try {
-        const aboutDocRef = doc(db, 'about', 'aboutText'); // Reference to Firestore document
-        const aboutDocSnap = await getDoc(aboutDocRef);   // Correct function for a single document
+        // Reference to the user's About Text document
+        const aboutDocRef = doc(db, 'users', currentUser.uid, 'about', 'aboutText');
+        const aboutDocSnap = await getDoc(aboutDocRef);   // Fetch the document
 
         if (aboutDocSnap.exists()) {
           setAboutText(aboutDocSnap.data().text); // Set the fetched About Text
@@ -49,26 +57,33 @@ const About = () => {
     };
 
     fetchAboutText();
-  }, []); // Empty dependency array to run only once when component mounts
+  }, [currentUser]); // Re-fetch if the user changes
 
-  // Fetch Services Data
+  // Fetch Services - User Specific
   useEffect(() => {
     const fetchServices = async () => {
+      if (!currentUser) {
+        console.log('User is not logged in.');
+        return;
+      }
+
       try {
-        const querySnapshot = await getDocs(collection(db, "services"));
+        const servicesRef = query(collection(db, 'services'), where("userId", "==", currentUser.uid));
+        const querySnapshot = await getDocs(servicesRef); // Fetch the services documents
+
         const servicesList = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
         }));
+
         setServices(servicesList); // Set the fetched services data
       } catch (error) {
-        console.error("Error fetching services: ", error);
+        console.error('Error fetching services:', error);
       }
     };
 
     fetchServices();
-  }, []); // Empty dependency array to run only once when component mounts
-
+  }, [currentUser]); // Re-fetch if the user changes
   return (
     <>
       <motion.div

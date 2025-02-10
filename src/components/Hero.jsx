@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { styles } from '../styles';
-import { db } from '../../firebase'; // Assuming you're using Firebase for dynamic data
+import { db,auth} from '../../firebase'; // Assuming you're using Firebase for dynamic data
 import { doc, getDoc } from 'firebase/firestore';
 import imagePath from "../assets/comp.svg";
 
@@ -13,35 +13,49 @@ const Hero = () => {
     cvUrl: "", // Add CV URL for download
   });
 
-  useEffect(() => {
-    // Function to fetch hero data from Firebase
-    const fetchHeroData = async () => {
-      try {
-        const docRef = doc(db, "heroSection", "1"); // Assuming you have a document in Firestore with ID "1"
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setHeroData(docSnap.data());
-        } else {
-          console.log("No such document!");
-        }
+  const currentUser = auth.currentUser; // Get current authenticated user
 
-        // Fetch CV URL from Firestore (assuming it is saved in a separate "cvSection" document)
-        const cvDocRef = doc(db, "cvSection", "1"); // Adjust according to your Firestore structure
-        const cvDocSnap = await getDoc(cvDocRef);
-        if (cvDocSnap.exists()) {
-          setHeroData(prevData => ({
-            ...prevData,
-            cvUrl: cvDocSnap.data().cvUrl,
-          }));
-        }
+  const fetchHeroData = async () => {
+    if (!currentUser) {
+      console.log('User is not logged in.');
+      return;
+    }
 
-      } catch (error) {
-        console.error("Error fetching hero data: ", error);
+    try {
+      // Fetch Hero Data for the logged-in user
+      const docRef = doc(db, 'users', currentUser.uid, 'heroSection', '1'); // Hero section data for the current user
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        setHeroData(prevData => ({
+          ...prevData,
+          ...docSnap.data(),  // Set the hero section data (name, jobTitle, description, etc.)
+        }));
+      } else {
+        console.log('No hero section data available for this user!');
       }
-    };
 
+      // Fetch CV URL from the user-specific "cvSection" document
+      const cvDocRef = doc(db, 'users', currentUser.uid, 'cvSection', '1'); // CV data for the current user
+      const cvDocSnap = await getDoc(cvDocRef);
+
+      if (cvDocSnap.exists()) {
+        setHeroData(prevData => ({
+          ...prevData,
+          cvUrl: cvDocSnap.data().cvUrl,
+        }));
+      } else {
+        console.log('No CV data available for this user!');
+      }
+
+    } catch (error) {
+      console.error('Error fetching hero data: ', error);
+    }
+  };
+
+  useEffect(() => {
     fetchHeroData();
-  }, []);
+  }, [currentUser]); // Refetch when the user changes or logs in
 
   // Function to handle CV download
   const handleDownloadCv = () => {
@@ -51,9 +65,10 @@ const Hero = () => {
       link.download = 'CV.pdf';  // You can dynamically set the name of the file
       link.click();
     } else {
-      alert("CV is not available.");
+      alert('CV is not available.');
     }
   };
+
 
   return (
     <section className="relative w-full h-screen mx-auto">

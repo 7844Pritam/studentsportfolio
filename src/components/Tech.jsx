@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { SectionWrapper } from "../hoc";
-import { db } from "../../firebase"; // Import your Firebase configuration
+import { db,auth } from "../../firebase"; // Import your Firebase configuration
 import { collection, getDocs } from "firebase/firestore"; // Firebase Firestore functions
 
 const Tech = () => {
   const [technologies, setTechnologies] = useState([]); // State to store technologies
   const [loading, setLoading] = useState(true); // Loading state for fetching data
-
+ const currentUser = auth.currentUser; // Get the current authenticated user
   // Fetch technologies from Firestore
   useEffect(() => {
     const fetchTechnologies = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "technologies"));
+                // const experiencesRef = collection(db, 'users', currentUser.uid, 'experiences');
+        
+        const querySnapshot = await getDocs(collection(db,'users',currentUser.uid, "technologies",));
         const fetchedTechnologies = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),

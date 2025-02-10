@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, storage } from '../../firebase'; // Import Firebase
+import { db, storage,auth } from '../../firebase'; // Import Firebase
 import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
@@ -17,17 +17,26 @@ const Testimonials = () => {
   const [imageFile, setImageFile] = useState(null);
   
   // Fetch testimonials from Firestore
+  const currentUser = auth.currentUser; // Get current authenticated user
+
+  // Fetch testimonials specific to the current user
   useEffect(() => {
     const fetchTestimonials = async () => {
-      const querySnapshot = await getDocs(collection(db, 'testimonials'));
-      const testimonialsData = querySnapshot.docs.map(doc => ({
+      if (!currentUser) {
+        console.log('User is not logged in.');
+        return;
+      }
+
+      const querySnapshot = await getDocs(collection(db, 'users', currentUser.uid, 'testimonials'));
+      const testimonialsData = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
       setTestimonialsList(testimonialsData);
     };
+
     fetchTestimonials();
-  }, []);
+  }, [currentUser]); // Refetch when the user changes or logs in
 
   // Handle image file change
   const handleImageChange = (e) => {
@@ -60,7 +69,7 @@ const Testimonials = () => {
         const imageUrl = await uploadImage(imageFile);
 
         // Add testimonial data to Firestore
-        const docRef = await addDoc(collection(db, 'testimonials'), {
+        const docRef = await addDoc(collection(db, 'users', currentUser.uid, 'testimonials'), {
           ...newTestimonial,
           image: imageUrl,
         });
@@ -92,7 +101,7 @@ const Testimonials = () => {
           updatedData.image = imageUrl;
         }
 
-        const projectRef = doc(db, 'testimonials', testimonialsList[editTestimonial].id);
+        const projectRef = doc(db, 'users', currentUser.uid, 'testimonials', testimonialsList[editTestimonial].id);
         await updateDoc(projectRef, updatedData);
 
         setTestimonialsList(
@@ -120,7 +129,7 @@ const Testimonials = () => {
   // Handle Delete
   const handleDeleteTestimonial = async (id) => {
     try {
-      await deleteDoc(doc(db, 'testimonials', id));
+      await deleteDoc(doc(db, 'users', currentUser.uid, 'testimonials', id));
       setTestimonialsList(testimonialsList.filter((testimonial) => testimonial.id !== id));
     } catch (error) {
       console.error('Error deleting testimonial: ', error);

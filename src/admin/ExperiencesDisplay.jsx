@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { db, storage } from "../../firebase"; 
+import { db, storage,auth } from "../../firebase"; 
 import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { MdWork, MdEdit, MdDelete, MdAdd } from "react-icons/md"; 
@@ -17,6 +17,8 @@ const ExperienceFormModal = ({ isOpen, closeModal, experienceToEdit }) => {
   });
 
   const [imageFile, setImageFile] = useState(null);
+
+  const currentUser = auth.currentUser; // Get the current authenticated user
 
   // Sync the form state with the experienceToEdit prop
   useEffect(() => {
@@ -43,22 +45,32 @@ const ExperienceFormModal = ({ isOpen, closeModal, experienceToEdit }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!currentUser) {
+      alert("You must be logged in to add or edit experiences.");
+      return;
+    }
+
     let imageUrl = experience.image;
 
+    // Upload image if a new one is selected
     if (imageFile) {
-      const storageRef = ref(storage, `experiences/${Date.now()}-${imageFile.name}`);
+      const storageRef = ref(storage, `users/${currentUser.uid}/experiences/${Date.now()}-${imageFile.name}`);
       const uploadResult = await uploadBytes(storageRef, imageFile);
-      imageUrl = await getDownloadURL(uploadResult.ref); 
+      imageUrl = await getDownloadURL(uploadResult.ref); // Get the image URL after uploading
     }
 
     if (experienceToEdit) {
-      const experienceRef = doc(db, "experiences", experienceToEdit.id);
+      // Editing an existing experience
+      const experienceRef = doc(db, "users", currentUser.uid, "experiences", experienceToEdit.id);
       await updateDoc(experienceRef, { ...experience, image: imageUrl });
       alert("Experience updated successfully!");
     } else {
-      await addDoc(collection(db, "experiences"), { ...experience, image: imageUrl });
+      // Adding a new experience
+      await addDoc(collection(db, "users", currentUser.uid, "experiences"), { ...experience, image: imageUrl });
       alert("Experience added successfully!");
     }
+
     closeModal();
   };
 
@@ -147,31 +159,46 @@ const ExperiencesDisplay = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [experienceToEdit, setExperienceToEdit] = useState(null);
 
+  const currentUser = auth.currentUser; // Get the current authenticated user
+
+  // Fetch experiences specific to the current user
   useEffect(() => {
     const fetchExperiences = async () => {
-      const querySnapshot = await getDocs(collection(db, "experiences"));
+      if (!currentUser) {
+        console.log("User is not logged in.");
+        return;
+      }
+
+      const querySnapshot = await getDocs(collection(db, "users", currentUser.uid, "experiences"));
       const data = querySnapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
       setExperiences(data);
     };
 
     fetchExperiences();
-  }, []);
+  }, [currentUser]); // Refetch when the user changes or logs in
 
+  // Handle delete experience
   const handleDelete = async (id) => {
-    await deleteDoc(doc(db, "experiences", id));
+    if (!currentUser) {
+      alert("You must be logged in to delete experiences.");
+      return;
+    }
+
+    await deleteDoc(doc(db, "users", currentUser.uid, "experiences", id));
     setExperiences(experiences.filter((exp) => exp.id !== id));
   };
 
+  // Handle edit experience
   const handleEdit = (experience) => {
     setExperienceToEdit(experience);
     setIsModalOpen(true);
   };
 
+  // Handle add new experience
   const handleAdd = () => {
-    setExperienceToEdit(null); 
-    setIsModalOpen(true); 
+    setExperienceToEdit(null); // Clear the form for adding a new experience
+    setIsModalOpen(true);
   };
-
   return (
     <div>
       <h2 className="text-3xl font-bold text-center mb-6">Work Experience</h2>

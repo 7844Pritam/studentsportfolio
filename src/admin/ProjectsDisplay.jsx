@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { db } from "../../firebase";
+import { db,auth } from "../../firebase";
 import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Import Firebase Storage
 import { MdClose } from "react-icons/md"; // Import React Icon
@@ -20,22 +20,26 @@ const ProjectsDisplay = () => {
   const [tagInput, setTagInput] = useState(""); // To handle tag input field
   const storage = getStorage(); // Initialize Firebase Storage
 
+  const currentUser = auth.currentUser; // Get the current authenticated user
+
   // Fetch projects from Firestore
   useEffect(() => {
     const fetchProjects = async () => {
-      const querySnapshot = await getDocs(collection(db, "projects"));
-      const projectsData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setProjects(projectsData);
+      if (currentUser) {
+        const querySnapshot = await getDocs(collection(db, "users", currentUser.uid, "projects"));
+        const projectsData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        setProjects(projectsData);
+      }
     };
 
     fetchProjects();
-  }, []);
+  }, [currentUser]);
 
   // Handle image upload to Firebase Storage
   const handleImageUpload = async () => {
     if (!imageFile) return;
 
-    const storageRef = ref(storage, `project-screenshots/${imageFile.name}`);
+    const storageRef = ref(storage, `project-screenshots/${currentUser.uid}/${imageFile.name}`);
     await uploadBytes(storageRef, imageFile);
     const imageUrl = await getDownloadURL(storageRef);
     return imageUrl;
@@ -52,7 +56,7 @@ const ProjectsDisplay = () => {
         imageUrl = await handleImageUpload();
       }
 
-      const docRef = await addDoc(collection(db, "projects"), { ...newProject, imageUrl });
+      const docRef = await addDoc(collection(db, "users", currentUser.uid, "projects"), { ...newProject, imageUrl });
       setProjects([...projects, { id: docRef.id, ...newProject, imageUrl }]);
       setNewProject({ name: "", description: "", githubLink: "", liveDemoLink: "", tags: [], imageUrl: "" });
       setImageFile(null); // Reset the image file
@@ -72,7 +76,7 @@ const ProjectsDisplay = () => {
         imageUrl = await handleImageUpload(); // Upload new image if provided
       }
 
-      const projectRef = doc(db, "projects", editProject.id);
+      const projectRef = doc(db, "users", currentUser.uid, "projects", editProject.id);
       await updateDoc(projectRef, { ...editProject, imageUrl });
 
       setProjects(projects.map((project) => (project.id === editProject.id ? { ...editProject, imageUrl } : project)));
@@ -85,7 +89,7 @@ const ProjectsDisplay = () => {
 
   // Handle delete project
   const handleDeleteProject = async (id) => {
-    await deleteDoc(doc(db, "projects", id));
+    await deleteDoc(doc(db, "users", currentUser.uid, "projects", id));
     setProjects(projects.filter((project) => project.id !== id));
   };
 

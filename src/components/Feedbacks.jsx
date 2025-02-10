@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { styles } from "../styles";
 import { SectionWrapper } from "../hoc";
-import { db } from "../../firebase";  // import Firebase db
+import { db,auth } from "../../firebase";  // import Firebase db
 import { collection, getDocs } from "firebase/firestore";  // Firestore functions
 import { motion } from "framer-motion";  // Importing Framer Motion for animation
 
@@ -50,24 +50,43 @@ const FeedbackCard = ({
 
 const Feedbacks = () => {
   const [testimonialsData, setTestimonialsData] = useState([]);
+  const [loading, setLoading] = useState(true); // Loading state to handle fetch status
 
   // Fetch testimonials from Firestore
+  const currentUser = auth.currentUser; // Get the current authenticated user
+
   useEffect(() => {
     const fetchTestimonials = async () => {
+      if (!currentUser) {
+        console.log("User is not logged in.");
+        setLoading(false); // Stop loading if the user is not logged in
+        return;
+      }
+
       try {
-        const querySnapshot = await getDocs(collection(db, "testimonials"));
+        // Reference to the user's testimonials collection
+        const testimonialsRef = collection(db, 'users', currentUser.uid, 'testimonials');
+        const querySnapshot = await getDocs(testimonialsRef);
+
         const testimonialsList = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
-        setTestimonialsData(testimonialsList);
+
+        setTestimonialsData(testimonialsList); // Set the fetched testimonials data
       } catch (error) {
         console.error("Error fetching testimonials:", error);
+      } finally {
+        setLoading(false); // Set loading to false after the fetch operation is done
       }
     };
 
     fetchTestimonials();
-  }, []);
+  }, [currentUser]); // Re-fetch when the currentUser changes
+
+  if (loading) {
+    return <div>Loading...</div>; // Display loading text or spinner while fetching
+  }
 
   return (
     <div className={`mt-12 bg-black-100 rounded-[20px]`}>

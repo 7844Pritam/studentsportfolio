@@ -1,6 +1,6 @@
   import React, { useRef, useState } from "react";
   import { motion } from "framer-motion";
-  import { db} from '../../firebase';  // Import Firebase functions4
+  import { db,auth} from '../../firebase';  // Import Firebase functions4
   import { collection, addDoc, serverTimestamp} from "firebase/firestore";
 
 import map from '../assets/map.svg';
@@ -32,21 +32,30 @@ const Contact = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
+  
+    // Get the current authenticated user
+    const currentUser = auth.currentUser;
+  
+    if (!currentUser) {
+      alert("You need to be logged in to submit the form.");
+      setLoading(false);
+      return;
+    }
+  
     // Save to Firebase Firestore
     try {
-      const docRef = await addDoc(collection(db, "contacts"), {
-        name: form.name,
+      const docRef = await addDoc(collection(db, "users", currentUser.uid, "contacts"), {
         email: form.email,
         message: form.message,
         timestamp: serverTimestamp(), // Automatically add timestamp
+        userId: currentUser.uid, // Save the current user's UID to associate with the document
       });
-
+      
       console.log("Document written with ID: ", docRef.id);
-
+  
       setLoading(false);
       alert("Thank you! Your message has been received.");
-
+  
       setForm({
         name: "",
         email: "",
@@ -58,7 +67,6 @@ const Contact = () => {
       alert("Ahh, something went wrong. Please try again.");
     }
   };
-
   return (
     <div className={`xl:mt-12 flex xl:flex-row flex-col-reverse gap-10 overflow-hidden`}>
       <motion.div variants={slideIn("left", "tween", 0.2, 1)} className='flex-[0.75] bg-black-100 p-8 rounded-2xl'>
